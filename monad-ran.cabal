@@ -1,0 +1,27 @@
+name:                   monad-ran
+version:                0.0.6
+build-type:             Simple
+license:                BSD3
+license-file:           LICENSE
+category:               Control
+author:                 Edward Kmett
+copyright:              (c) Edward Kmett 2009 (c) Matt Morrow 2008
+maintainer:             Edward Kmett <ekmett@gmail.com>
+stability:              experimental
+synopsis:               Implementations of common monads and monad transformers as right Kan extensions
+cabal-version:          >= 1.6
+description:            .
+
+library
+    ghc-options:        -O2
+    extensions:         MultiParamTypeClasses, 
+                        FlexibleContexts,
+                        FlexibleInstances,
+                        Rank2Types, 
+                        TypeOperators,
+                        TypeFamilies,
+                        KindSignatures,
+                        FunctionalDependencies,
+                        GeneralizedNewtypeDeriving
+    build-depends:      base >= 4.0 && < 4.2, mtl >= 1.1 && < 1.2
+    exposed-modules:    Control.Monad.Ran
