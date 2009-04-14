@@ -38,6 +38,9 @@ instance Monad f => Monad (Yoneda f) where
 instance MonadTrans Yoneda where
     lift m = Yoneda (\f -> liftM f m)
 
+runYoneda :: Yoneda f a -> f a 
+runYoneda (Yoneda f) = f id
+
 data Codensity f a = Codensity { getCodensity :: forall b. (a -> f b) -> f b }
 
 instance Functor (Codensity k) where
@@ -104,13 +107,13 @@ instance Error b => RMonad (Either b) where
 
 -- Yoneda (ErrorTH b m)
 -- forall o. (a -> G m o) -> (b -> G m o) -> H m o
+-- forall o. (a -> G m o) -> H m ((b -> G m o) -> o) ?
 instance (RMonad m, Error b) => RMonad (ErrorT b m) where
     type G (ErrorT b m) = G m 
     type H (ErrorT b m) = ErrorTH b m
 
-
 -- Yoneda f
--- forall o. (a -> Identity o) -> f o 
+-- Ran (Yoneda f) forall o. (a -> Identity o) -> f o 
 instance Monad f => RMonad (Yoneda f) where
     type G (Yoneda f) = Identity
     type H (Yoneda f) = f
@@ -130,6 +133,8 @@ instance RMonad (Codensity f) where
 instance RMonad (Reader e) where
     type G (Reader e) = Identity
     type H (Reader e) = Reader e
+    toRan m = Ran (\f -> liftM (runIdentity . f) m)
+    fromRan (Ran f) = f Identity
 
 -- embedded as CPS'd State to avoid superfluous 'mappend mempty' calls
 -- specialized Codensity (Reader w)
@@ -137,6 +142,8 @@ instance RMonad (Reader e) where
 instance Monoid w => RMonad (Writer w) where
     type G (Writer w) = Hom w
     type H (Writer w) = Hom w
+    toRan (Writer w')  = Ran (\f w -> uncurry f (w `mappend` w')
+    fromRan (Ran f)    = Writer (f (,) mempty)
     -- forall o. (a -> w -> o) -> o
     -- type H (Writer w) = Identity
 
@@ -145,6 +152,8 @@ instance Monoid w => RMonad (Writer w) where
 instance RMonad (State s) where
     type G (State s) = Hom s
     type H (State s) = Hom s
+    toRan (State g)  = Ran (\f -> uncurry f . g)
+    fromRan (Ran f)  = State (f (,))
 
 -- Codensity (Const r)
 -- (a -> r) -> r
@@ -157,6 +166,7 @@ instance RMonad m => RMonad (ReaderT e m) where
     type G (ReaderT e m) = G m
     type H (ReaderT e m) = e :-> H m
 
+-- forall o. (a -> G m (w -> o)) -> H m (w -> o) ?
 -- forall o. (a -> w -> G m o) -> H m o
 instance (Monoid w, RMonad m) => RMonad (WriterT w m) where
     type G (WriterT w m) = w :-> G m
