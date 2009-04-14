@@ -118,7 +118,7 @@ instance Monad (Ran Maybe) where
     fail = mempty
 
 instance MonadPlus (Ran Maybe) where
-    mempty = Ran (\_ -> Endo id)
+    mzero = Ran (\_ -> Endo id)
     Ran m `mplus` n = Ran (\k -> Endo (\z -> appEndo (getRan m k) (appEndo (getRan n k) z)))
 
 -- Yoneda (ErrorH e) ~ forall o. (a -> o) -> (e -> o) -> o
@@ -139,7 +139,7 @@ instance Error e => MonadError (Ran (Either e)) where
 --  catchError f h = Ran (\k -> ErrorH (\e -> getErrorH (getRan f k) e))
 
 instance Error e => MonadPlus (Ran (Either e)) where
-    mempty = throwError noMsg
+    mzero = throwError noMsg
         
     
 
