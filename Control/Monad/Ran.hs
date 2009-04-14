@@ -119,7 +119,7 @@ instance Monad (Ran Maybe) where
 
 instance MonadPlus (Ran Maybe) where
     mempty = Ran (\_ -> Endo id)
-    Ran m `mplus` n = Ran (\k -> Endo (\z -> appEndo (getRan m k) (appEndo (getRan n k) z)) 
+    Ran m `mplus` n = Ran (\k -> Endo (\z -> appEndo (getRan m k) (appEndo (getRan n k) z)))
 
 -- Yoneda (ErrorH e) ~ forall o. (a -> o) -> (e -> o) -> o
 instance Error e => RMonad (Either e) where
