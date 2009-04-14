@@ -102,6 +102,9 @@ instance RMonad Maybe where
 instance Error b => RMonad (Either b) where
     type G (Either b) = Identity
     type H (Either b) = ErrorH b
+    toRan (Right x) = Ran (\k -> ErrorH (\_ -> runIdentity (k x)))
+    toRan (Left x) = Ran (\_ -> ErrorH (\k -> k x))
+    fromRan (Ran f) = getErrorH (f (Identity . Right)) Left
 
 -- Yoneda (ErrorTH b m)
 -- forall o. (a -> G m o) -> (b -> G m o) -> H m o
