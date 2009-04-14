@@ -123,8 +123,8 @@ instance MonadPlus (Ran Maybe) where
 
 -- Yoneda (ErrorH e) ~ forall o. (a -> o) -> (e -> o) -> o
 instance Error e => RMonad (Either e) where
-    type G (Either b) = Identity
-    type H (Either b) = ErrorH b
+    type G (Either e) = Identity
+    type H (Either e) = ErrorH b
     toRan (Right x) = Ran (\k -> ErrorH (\_ -> runIdentity (k x)))
     toRan (Left x) = Ran (\_ -> ErrorH (\e -> e x))
     fromRan (Ran f) = getErrorH (f (Identity . Right)) Left
