@@ -22,6 +22,7 @@ library
                         TypeFamilies,
                         KindSignatures,
                         FunctionalDependencies,
-                        GeneralizedNewtypeDeriving
+                        GeneralizedNewtypeDeriving,
+                        UndecidableInstances
     build-depends:      base >= 4.0 && < 4.2, mtl >= 1.1 && < 1.2
     exposed-modules:    Control.Monad.Ran
