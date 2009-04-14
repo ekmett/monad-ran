@@ -70,17 +70,13 @@ class Monad f => RMonad f where
     toRan      :: f a -> Ran f a
     fromRan    :: Ran f a -> f a
 
---class RMonadTrans t where
---    liftR :: RMonad m => RanT m a -> RanT (t m) a
-
--- utility bifunctors for definitions below
 type Hom = (->)
 type (:->) = ReaderT
 
 data ErrorH b r  = ErrorH { getErrorH :: (b -> r) -> r } 
 data ErrorTH b m r = ErrorTH { getErrorTH :: (b -> G m r) -> H m r }
 
--- Yoneda Identity
+-- Yoneda Identity ~ Codensity Identity
 -- forall o. (a -> o) -> o
 instance RMonad Identity where
     type G Identity = Identity
@@ -109,26 +105,31 @@ instance Error b => RMonad (Either b) where
 -- Yoneda (ErrorTH b m)
 -- forall o. (a -> G m o) -> (b -> G m o) -> H m o
 instance (RMonad m, Error b) => RMonad (ErrorT b m) where
-   type G (ErrorT b m) = G m 
-   type H (ErrorT b m) = ErrorTH b m
+    type G (ErrorT b m) = G m 
+    type H (ErrorT b m) = ErrorTH b m
+
 
 -- Yoneda f
--- forall o. (a -> o) -> f o 
+-- forall o. (a -> Identity o) -> f o 
 instance Monad f => RMonad (Yoneda f) where
     type G (Yoneda f) = Identity
     type H (Yoneda f) = f
+    toRan (Yoneda f) = Ran (\b -> f (runIdentity . b))
+    fromRan (Ran f) = Yoneda (\b -> f (Identity . b))
 
 -- Codensity f
 -- forall o. (a -> f o) -> f o 
 instance RMonad (Codensity f) where
     type G (Codensity f) = f
     type H (Codensity f) = f
+    toRan (Codensity f) = Ran f
+    fromRan (Ran f) = Codensity f
 
 -- Yoneda (Reader r)
 -- forall o. (a -> o) -> r -> o
 instance RMonad (Reader e) where
     type G (Reader e) = Identity
-    type H (Reader e) = Hom e
+    type H (Reader e) = Reader e
 
 -- embedded as CPS'd State to avoid superfluous 'mappend mempty' calls
 -- specialized Codensity (Reader w)
