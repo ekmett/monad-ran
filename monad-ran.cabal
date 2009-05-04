@@ -1,16 +1,16 @@
 name:                   monad-ran
-version:                0.0.6
+version:                0.0.7
 build-type:             Simple
 license:                BSD3
 license-file:           LICENSE
 category:               Control
 author:                 Edward Kmett
-copyright:              (c) Edward Kmett 2009 (c) Matt Morrow 2008
+copyright:              (c) Edward Kmett 2009
 maintainer:             Edward Kmett <ekmett@gmail.com>
 stability:              experimental
-synopsis:               Implementations of common monads and monad transformers as right Kan extensions
+synopsis:               Fast implementations of monads and monad transformers using right Kan extensions
 cabal-version:          >= 1.6
-description:            .
+description:            Fast implementations of monads and monad transformers using right Kan extensions
 
 library
     ghc-options:        -O2
@@ -20,9 +20,19 @@ library
                         Rank2Types, 
                         TypeOperators,
                         TypeFamilies,
+                        MagicHash,
+                        UnboxedTuples,
                         KindSignatures,
                         FunctionalDependencies,
                         GeneralizedNewtypeDeriving,
                         UndecidableInstances
-    build-depends:      base >= 4.0 && < 4.2, mtl >= 1.1 && < 1.2
-    exposed-modules:    Control.Monad.Ran
+    build-depends:      
+        base >= 4.0 && < 4.2, 
+        mtl >= 1.1 && < 1.2,
+        ghc-prim >= 0.1 && < 0.2
+    exposed-modules:    
+        Control.Functor.Pointed
+        Control.Monad.Ran
+        Control.Monad.Yoneda
+        Control.Monad.Codensity
+        Control.Monad.CPS.Maybe
