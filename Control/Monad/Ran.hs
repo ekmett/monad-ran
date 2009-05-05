@@ -131,12 +131,6 @@ instance Alternative (Codensity f) => Alternative (Ran (Codensity f)) where
     empty = liftRan empty
     m <|> n = liftRan (lowerRan m <|> lowerRan n)
 
-{-
-instance MonadPlus f => Alternative (Ran (Codensity f)) where
-    empty = liftRan mzero
-    m <|> n = liftRan (lowerRan m `mplus` lowerRan n)
--}
-    
 instance MonadPlus f => MonadPlus (Ran (Codensity f)) where
     mzero = liftRan mzero
     m `mplus` n = liftRan (lowerRan m `mplus` lowerRan n)
@@ -589,6 +583,9 @@ instance (RMonad m, MonadPlus (Ran m)) => MonadPlus (Ran (ReaderT e m)) where
     mzero = inRan mzero
     a `mplus` b = inRan (outRan a `mplus` outRan b)
 
+instance (RMonad m, MonadFix (Ran m)) => MonadFix (Ran (ReaderT e m)) where
+    mfix f = inRan $ mfix (outRan . f)
+
 -- TODO: instance MonadError (ReaderT e m), MonadCont (ReaderT e m), MonadFix (ReaderT e m), ...
 -- MonadPlus (ReaderT e m), MonadFix (ReaderT e m)
 
@@ -641,6 +638,11 @@ instance (RMonad m, Error e, MonadWriter w (Ran m)) => MonadWriter w (Ran (Error
 
 instance (RMonad m, Error e, MonadRWS r w s (Ran m)) => MonadRWS r w s (Ran (ErrorT e m))
 
+instance (RMonad m, Error e, MonadIO (Ran m)) => MonadIO (Ran (ErrorT e m)) where
+    liftIO = inRan . liftIO
+
+instance (RMonad m, Error e, MonadFix (Ran m)) => MonadFix (Ran (ErrorT e m)) where
+    mfix f = inRan $ mfix (outRan . f)
 {-
 -- (a -> r) -> r
 instance RMonad (Cont r) where
