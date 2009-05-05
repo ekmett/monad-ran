@@ -5,7 +5,9 @@ module Control.Monad.Ran
     ( -- * A right Kan extension monad transformer
       Ran(..)
       -- * Representing monads as right Kan extensions
+    , RApplicative
     , RMonad
+    , RanIso
     , G
     , H
     , liftRan
@@ -30,6 +32,7 @@ module Control.Monad.Ran
     , Pointed(..)
       -- * The Yoneda Lemma
     , Yoneda(..)
+    , lowerYoneda
       -- * The codensity monad of a functor
     , Codensity(..)
     , lowerCodensity
