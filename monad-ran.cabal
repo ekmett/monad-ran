@@ -1,5 +1,5 @@
 name:                   monad-ran
-version:                0.0.8
+version:                0.0.9
 build-type:             Simple
 license:                BSD3
 license-file:           LICENSE
