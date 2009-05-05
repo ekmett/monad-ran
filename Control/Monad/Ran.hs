@@ -15,6 +15,15 @@ module Control.Monad.Ran
     , H
     , liftRan
     , lowerRan
+    , returnRanCodensity
+    , bindRanCodensity
+    , apRanCodensity
+    , ranCodensity
+    , codensityRan
+    , liftRanCodensity
+    , lowerRanCodensity
+    , liftRanWorld
+    , lowerRanWorld
     ) where
 
 import Data.Monoid
@@ -49,14 +58,26 @@ class RanIso f where
 instance RanIso f => Functor (Ran f) where
     fmap f m = Ran (\k -> getRan m (k . f))
 
-returnCodensity :: (RanIso m, G m ~ H m) => a -> Ran m a
-returnCodensity a = Ran (\k -> k a)
+returnRanCodensity :: (RanIso m, G m ~ H m) => a -> Ran m a
+returnRanCodensity a = Ran (\k -> k a)
 
-bindCodensity :: (RanIso m, G m ~ H m) => Ran m a -> (a -> Ran m b) -> Ran m b
-bindCodensity (Ran m) k = Ran (\c -> m (\a -> getRan (k a) c))
+bindRanCodensity :: (RanIso m, G m ~ H m) => Ran m a -> (a -> Ran m b) -> Ran m b
+bindRanCodensity (Ran m) k = Ran (\c -> m (\a -> getRan (k a) c))
 
-apCodensity :: (RanIso m, G m ~ H m) => Ran m (a -> b) -> Ran m a -> Ran m b
-apCodensity (Ran f) (Ran x) = Ran (\k -> f (\f' -> x (k . f')))
+apRanCodensity :: (RanIso m, G m ~ H m) => Ran m (a -> b) -> Ran m a -> Ran m b
+apRanCodensity (Ran f) (Ran x) = Ran (\k -> f (\f' -> x (\x' -> k (f' x'))))
+
+liftRanCodensity :: (RanIso m, G m ~ H m, Monad (G m)) => G m a -> Ran m a
+liftRanCodensity f = Ran (f >>=)
+
+lowerRanCodensity :: (RanIso m, G m ~ H m, Monad (G m)) => Ran m a -> G m a 
+lowerRanCodensity (Ran f) = f return
+
+mfixRanCodensity :: (RanIso m, G m ~ H m, MonadFix (G m)) => (a -> Ran m a) -> Ran m a
+mfixRanCodensity f = liftRanCodensity $ mfix (lowerRanCodensity . f)
+
+mfixRan :: (RanIso m, MonadFix m) => (a -> Ran m a) -> Ran m a
+mfixRan f = liftRan $ mfix (lowerRan . f)
 
 class (Monad (Ran f), Monad f, RanIso f) => RMonad f 
 instance (Monad (Ran f), Monad f, RanIso f) => RMonad f
@@ -69,31 +90,25 @@ instance (Applicative (Ran f), Applicative f, RanIso f) => RApplicative f
 instance RanIso (Codensity f) where
     type G (Codensity f) = f
     type H (Codensity f) = f
-    liftRan (Codensity f) = Ran f
-    lowerRan (Ran f) = Codensity f
+    liftRan = codensityRan
+    lowerRan = ranCodensity
 
 ranCodensity :: Ran (Codensity f) a -> Codensity f a
-ranCodensity = lowerRan
+ranCodensity (Ran f) = Codensity f
 
 codensityRan :: Codensity f a -> Ran (Codensity f) a
-codensityRan = liftRan
-
-liftRanCodensity :: Monad f => f a -> Ran (Codensity f) a
-liftRanCodensity f = Ran (f >>=)
-
-lowerRanCodensity :: Monad f => Ran (Codensity f) a -> f a 
-lowerRanCodensity (Ran f) = f return
+codensityRan (Codensity f) = Ran f
 
 instance Pointed (Ran (Codensity f)) where
-    point = returnCodensity
+    point = returnRanCodensity
 
 instance Applicative (Ran (Codensity f)) where
-    pure = returnCodensity
-    (<*>) = apCodensity
+    pure = returnRanCodensity
+    (<*>) = apRanCodensity
 
 instance Monad (Ran (Codensity f)) where
-    return = returnCodensity
-    (>>=) = bindCodensity
+    return = returnRanCodensity
+    (>>=) = bindRanCodensity
 
 instance MonadPlus f => Alternative (Ran (Codensity f)) where
     empty = liftRan mzero
@@ -139,15 +154,15 @@ instance RanIso Identity where
     lowerRan = flip getRan Identity
 
 instance Pointed (Ran Identity) where
-    point = returnCodensity
+    point = returnRanCodensity
 
 instance Applicative (Ran Identity) where
-    pure = returnCodensity
-    (<*>) = apCodensity
+    pure = returnRanCodensity
+    (<*>) = apRanCodensity
 
 instance Monad (Ran Identity) where
-    return = returnCodensity
-    (>>=) = bindCodensity
+    return = returnRanCodensity
+    (>>=) = bindRanCodensity
 
 newtype World w a = World { runWorld :: State# w -> a } 
 
@@ -172,15 +187,18 @@ instance RanIso IO where
     lowerRan s = IO (lowerRanWorld s)
 
 instance Applicative (Ran IO) where
-    pure = returnCodensity
-    (<*>) = apCodensity
+    pure = returnRanCodensity
+    (<*>) = apRanCodensity
 
 instance Monad (Ran IO) where
-    return = returnCodensity
-    (>>=) = bindCodensity
+    return = returnRanCodensity
+    (>>=) = bindRanCodensity
 
 instance MonadIO (Ran IO) where
     liftIO = liftRan
+
+instance MonadFix (Ran IO) where
+    mfix = mfixRan
 
 -- Represent ST s as the codensity of the world s
 instance RanIso (ST s) where
@@ -190,12 +208,15 @@ instance RanIso (ST s) where
     lowerRan r = ST (lowerRanWorld r)
 
 instance Applicative (Ran (ST s)) where
-    pure = returnCodensity
-    (<*>) = apCodensity
+    pure = returnRanCodensity
+    (<*>) = apRanCodensity
 
 instance Monad (Ran (ST s)) where
-    return = returnCodensity
-    (>>=) = bindCodensity
+    return = returnRanCodensity
+    (>>=) = bindRanCodensity
+
+instance MonadFix (Ran (ST s)) where
+    mfix f = liftRan $ fixST (lowerRan . f)
 
 -- todo make a MonadST class
 
@@ -207,13 +228,14 @@ instance RanIso STM where
     lowerRan r = STM (lowerRanWorld r)
 
 instance Applicative (Ran STM) where
-    pure = returnCodensity
-    (<*>) = apCodensity
+    pure = returnRanCodensity
+    (<*>) = apRanCodensity
 
 instance Monad (Ran STM) where
-    return = returnCodensity
-    (>>=) = bindCodensity
+    return = returnRanCodensity
+    (>>=) = bindRanCodensity
 
+-- why is there no MonadFix instance for STM?
 -- TODO: make a MonadSTM class
 
 -- Yoneda Endo a ~ forall o. (a -> o) -> o -> o ~ forall o. (a -> Identity o) -> Endo o
@@ -241,6 +263,11 @@ instance MonadPlus (Ran Maybe) where
 instance Monoid a => Monoid (Ran Maybe a) where
     mempty = mzero
     Ran a `mappend` Ran b = Ran (\k -> Endo (\z -> appEndo (a (\a' -> Identity (appEndo (b (k . mappend a')) z))) z))
+
+instance MonadFix (Ran Maybe) where
+    mfix f = m where
+        m = f (unJust m)
+        unJust (Ran r) = appEndo (r Identity) (error "mfix (Ran Maybe): Nothing")
 
 type (:->) = ReaderT
 
