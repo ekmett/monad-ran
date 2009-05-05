@@ -1,5 +1,5 @@
 name:                   monad-ran
-version:                0.0.7
+version:                0.0.8
 build-type:             Simple
 license:                BSD3
 license-file:           LICENSE
@@ -13,26 +13,10 @@ cabal-version:          >= 1.6
 description:            Fast implementations of monads and monad transformers using right Kan extensions
 
 library
-    ghc-options:        -O2
-    extensions:         MultiParamTypeClasses, 
-                        FlexibleContexts,
-                        FlexibleInstances,
-                        Rank2Types, 
-                        TypeOperators,
-                        TypeFamilies,
-                        MagicHash,
-                        UnboxedTuples,
-                        KindSignatures,
-                        FunctionalDependencies,
-                        GeneralizedNewtypeDeriving,
-                        UndecidableInstances
+    ghc-options:        -O2 -fspec-constr -funbox-strict-fields
     build-depends:      
         base >= 4.0 && < 4.2, 
         mtl >= 1.1 && < 1.2,
         ghc-prim >= 0.1 && < 0.2
     exposed-modules:    
-        Control.Functor.Pointed
         Control.Monad.Ran
-        Control.Monad.Yoneda
-        Control.Monad.Codensity
-        Control.Monad.CPS.Maybe
