@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, FlexibleInstances, FlexibleContexts, TypeFamilies, MultiParamTypeClasses, MagicHash, UnboxedTuples, UndecidableInstances, TypeSynonymInstances  #-}
+{-# LANGUAGE RankNTypes, FlexibleInstances, FlexibleContexts, TypeFamilies, MultiParamTypeClasses, MagicHash, UnboxedTuples, UndecidableInstances, TypeSynonymInstances, TypeOperators  #-}
 -- Finding the right Kan extension
 
 module Control.Monad.Ran 
@@ -15,6 +15,12 @@ module Control.Monad.Ran
     , H
     , liftRan
     , lowerRan
+      -- * Ran Monad Transformers
+    , RanTrans
+    , liftRanT
+    , outRan
+    , inRan
+      -- * Default definitions for common extension patterns
     , returnRanCodensity
     , bindRanCodensity
     , apRanCodensity
@@ -22,6 +28,7 @@ module Control.Monad.Ran
     , codensityRan
     , liftRanCodensity
     , lowerRanCodensity
+      -- * IO, ST s, STM
     , liftRanWorld
     , lowerRanWorld
     ) where
@@ -52,14 +59,21 @@ import Text.Show
 -- | A right Kan extension transformer for a monad
 data Ran m a = Ran { getRan :: forall b. (a -> G m b) -> H m b } 
 
-class RanIso f where
+class {- Functor (G f) => -} RanIso f where
     type G f :: * -> *
     type H f :: * -> *
     liftRan  :: f a -> Ran f a
     lowerRan :: Ran f a -> f a
 
+class RanTrans t where
+    liftRanT :: (RanIso m, RanIso (t m)) => Ran m a -> Ran (t m) a
+    outRan :: (RanIso m, RanIso (t m)) => Ran (t m) a -> t (Ran m) a
+    inRan :: (RanIso m, RanIso (t m)) => t (Ran m) a -> Ran (t m) a
+
 instance RanIso f => Functor (Ran f) where
     fmap f m = Ran (\k -> getRan m (k . f))
+
+-- Codensity-like embeddings
 
 returnRanCodensity :: (RanIso m, G m ~ H m) => a -> Ran m a
 returnRanCodensity a = Ran (\k -> k a)
@@ -237,14 +251,12 @@ instance Monoid w => MonadWriter w (Ran (Writer w)) where
 
 newtype World w a = World { runWorld :: State# w -> a } 
 
--- homegrown STret with flopped arguments
-data STret' s a = STret' a (State# s)
 
 liftRanWorld :: (G m ~ World w, H m ~ World w) => (State# w -> (# State# w, a #)) -> Ran m a
 liftRanWorld f = Ran (\k -> World (\w -> case f w of (# w', a #) -> runWorld (k a) w'))
 
--- viewpatterned to eliminate named temporaries:
--- liftRanWorld f = Ran (\k -> World (\(f -> (# w, (runWorld . k -> j) #)) -> j w))
+-- homegrown STret with flopped arguments
+data STret' s a = STret' a (State# s)
 
 lowerRanWorld :: (G m ~ World w, H m ~ World w) => Ran m a -> State# w -> (# State# w, a #)
 lowerRanWorld (Ran r) w = case runWorld (r (World . STret')) w of 
@@ -316,6 +328,65 @@ instance Monad (Ran STM) where
 
 -- why is there no MonadFix instance for STM?
 -- TODO: make a MonadSTM class
+
+-- Yoneda-like embeddings
+
+-- Yoneda lemma as a right Kan extension along the identity functor
+instance RanIso (Yoneda f) where
+    type G (Yoneda f) = Identity
+    type H (Yoneda f) = f
+    liftRan (Yoneda f) = Ran (\b -> f (runIdentity . b))
+    lowerRan (Ran f) = Yoneda (\b -> f (Identity . b))
+
+ranYoneda :: Ran (Yoneda f) a -> Yoneda f a
+ranYoneda = lowerRan
+
+yonedaRan :: Yoneda f a -> Ran (Yoneda f) a
+yonedaRan = liftRan
+
+instance Pointed f => Pointed (Ran (Yoneda f)) where
+    point = liftRan . point
+
+instance Applicative f => Applicative (Ran (Yoneda f)) where
+    pure = liftRan . pure
+    m <*> n = liftRan (lowerRan m <*> lowerRan n)
+
+instance Alternative f => Alternative (Ran (Yoneda f)) where
+    empty = liftRan empty
+    m <|> n = liftRan (lowerRan m <|> lowerRan n) 
+
+instance Monad f => Monad (Ran (Yoneda f)) where
+    return = liftRan . return
+    m >>= k = liftRan (lowerRan m >>= lowerRan . k)
+
+instance MonadPlus f => MonadPlus (Ran (Yoneda f)) where
+    mzero = liftRan mzero
+    m `mplus` n = liftRan (lowerRan m `mplus` lowerRan n)
+
+instance MonadReader r f => MonadReader r (Ran (Yoneda f)) where
+    ask = liftRan ask
+    local f = liftRan . local f . lowerRan
+
+instance MonadWriter w f => MonadWriter w (Ran (Yoneda f)) where
+    tell = liftRan . tell
+    listen = liftRan . listen . lowerRan
+    pass = liftRan . pass . lowerRan
+
+instance MonadState s f => MonadState s (Ran (Yoneda f)) where
+    get = liftRan get
+    put = liftRan . put
+
+instance MonadIO f => MonadIO (Ran (Yoneda f)) where
+    liftIO = liftRan . liftIO
+
+instance MonadRWS r w s f => MonadRWS r w s (Ran (Yoneda f))
+
+instance MonadError e f => MonadError e (Ran (Yoneda f)) where
+    throwError = liftRan . throwError
+    Ran f `catchError` h = Ran (\k -> f k `catchError` \e -> getRan (h e) k)
+
+instance MonadFix m => MonadFix (Ran (Yoneda m)) where
+    mfix f = Ran (\k -> liftM (runIdentity . k) $ mfix (\a -> getRan (f a) Identity))
 
 -- Yoneda Endo a ~ forall o. (a -> o) -> o -> o ~ forall o. (a -> Identity o) -> Endo o
 -- note Endo is not a Hask Functor and Maybe is not a Codensity monad, so this is trickier
@@ -442,20 +513,135 @@ instance Monoid m => Monoid (Ran ((->)e) m) where
     Ran a `mappend` Ran b = Ran (\k r -> runIdentity (k (a Identity r `mappend` b Identity r)))
 
 
+-- Yoneda (Reader r) ~ forall o. (a -> o) -> r -> o ~ forall o. (a -> Identity o) -> r -> o
+instance RanIso (Reader e) where
+    type G (Reader e) = Identity
+    type H (Reader e) = Reader e
+    liftRan m = Ran (\f -> liftM (runIdentity . f) m)
+    lowerRan (Ran f) = f Identity
+
+instance Pointed (Ran (Reader e)) where
+    point = return
+
+instance Applicative (Ran (Reader e)) where
+    pure = return
+    Ran f <*> Ran g = Ran (\k -> Reader (\r -> runIdentity (k (runReader (f Identity) r (runReader (g Identity) r)))))
+
+instance Monad (Ran (Reader e)) where
+    return a = Ran (\f -> Reader (\_ -> runIdentity (f a)))
+    Ran f >>= h = Ran (\k -> Reader (\r -> runReader(getRan (h (runReader (f Identity) r)) k) r))
+    
+instance MonadReader e (Ran (Reader e)) where 
+    ask = Ran (\k -> Reader (\r -> runIdentity (k r)))
+    local f (Ran m) = Ran (\k -> Reader (\r -> runReader (m k) (f r)))
+
+instance Monoid m => Monoid (Ran (Reader e) m) where
+    mempty = return mempty
+    Ran a `mappend` Ran b = Ran (\k -> Reader (\r -> runIdentity (k (runReader (a Identity) r `mappend` runReader (b Identity) r))))
 
 
+-- Ran Transformers
+
+-- ReaderT m a ~ forall o. (a -> G m o) -> ReaderT r (H m) o
+instance RanIso m => RanIso (ReaderT e m) where
+    type G (ReaderT e m) = G m
+    type H (ReaderT e m) = e :-> H m
+    liftRan (ReaderT f) = Ran (\k -> ReaderT (\e -> getRan (liftRan (f e)) k))
+    lowerRan (Ran f) = ReaderT (\e -> lowerRan (Ran (\k -> runReaderT (f k) e)))
+
+instance RanTrans (ReaderT e) where
+    liftRanT (Ran m) = Ran (ReaderT . const . m)
+    outRan (Ran m) = ReaderT (\e -> Ran (\k -> runReaderT (m k) e))
+    inRan (ReaderT f) = Ran (\k -> ReaderT (\e -> getRan (f e) k))
+
+instance RMonad m => Pointed (Ran (ReaderT e m)) where
+    point = inRan . return
+
+instance RMonad m => Applicative (Ran (ReaderT e m)) where
+    pure = inRan . return
+    f <*> g = inRan (outRan f `ap` outRan g)
+
+instance (RMonad m, MonadPlus (Ran m)) => Alternative (Ran (ReaderT e m)) where
+    empty = inRan mzero
+    f <|> g = inRan (outRan f `mplus` outRan g)
+
+instance RMonad m => Monad (Ran (ReaderT e m)) where
+    return = inRan . return
+    m >>= f = inRan (outRan m >>= outRan . f)
+
+instance (RMonad m, MonadState s (Ran m)) => MonadState s (Ran (ReaderT e m)) where
+    get = inRan get
+    put = inRan . put
+    
+instance RMonad m => MonadReader r (Ran (ReaderT r m)) where
+    ask     = inRan (ReaderT return)
+    local f = inRan . local f . outRan
+
+instance (RMonad m, MonadWriter w (Ran m)) => MonadWriter w (Ran (ReaderT e m)) where
+    tell = inRan . tell
+    listen = inRan . listen . outRan
+    pass = inRan . pass . outRan
+
+instance (RMonad m, MonadIO (Ran m)) => MonadIO (Ran (ReaderT e m)) where
+    liftIO = inRan . liftIO
+
+instance (RMonad m, MonadPlus (Ran m)) => MonadPlus (Ran (ReaderT e m)) where
+    mzero = inRan mzero
+    a `mplus` b = inRan (outRan a `mplus` outRan b)
+
+-- TODO: instance MonadError (ReaderT e m), MonadCont (ReaderT e m), MonadFix (ReaderT e m), ...
+-- MonadPlus (ReaderT e m), MonadFix (ReaderT e m)
+
+unwrapErrorT :: (RanIso m, Error a) => Ran (ErrorT a m) b -> Ran m (Either a b)
+unwrapErrorT (Ran m) = Ran (\k -> getErrorTH (m (k . Right)) (k . Left))
+
+wrapErrorT :: (RanIso m, Error a) => Ran m (Either a b) -> Ran (ErrorT a m) b
+wrapErrorT (Ran m) = Ran (\k -> ErrorTH (\e -> m (either e k)))
+
+-- m (Either a b) ~ (Either a b -> G m o) -> H m o ~ forall o. (a -> G m o) -> (b -> G m o) -> H m o
+data ErrorTH e m o = ErrorTH { getErrorTH :: (e -> G m o) -> H m o }
+instance (RanIso m, Error e) => RanIso (ErrorT e m) where
+    type G (ErrorT e m) = G m 
+    type H (ErrorT e m) = ErrorTH e m
+    liftRan (ErrorT m) = Ran (\k -> ErrorTH (\e -> getRan (liftRan m) (either e k)))
+    lowerRan (Ran m) = ErrorT (lowerRan (Ran (\k -> getErrorTH (m (k . Right)) (k . Left))))
+
+instance RanTrans (ErrorT e) where
+    liftRanT (Ran m) = Ran (\k -> ErrorTH (\_ -> m k))
+    outRan (Ran m) = ErrorT (Ran (\k -> getErrorTH (m (k . Right)) (k . Left)))
+    inRan (ErrorT m) = Ran (\k -> ErrorTH (\e -> getRan m (either e k)))
+
+instance (RMonad m, Error e) => Pointed (Ran (ErrorT e m)) where
+    point = inRan . return
+
+instance (RMonad m, Error e) => Applicative (Ran (ErrorT e m)) where
+    pure = inRan . return
+    f <*> g = inRan (outRan f `ap` outRan g)
+
+instance (RMonad m, Error e, MonadPlus (Ran m)) => Alternative (Ran (ErrorT e m)) where
+    empty = inRan mzero
+    f <|> g = inRan (outRan f `mplus` outRan g)
+
+instance (RMonad m, Error e)  => Monad (Ran (ErrorT e m)) where
+    return = inRan . return
+    m >>= f = inRan (outRan m >>= outRan . f)
+
+instance (RMonad m, Error e, MonadState s (Ran m)) => MonadState s (Ran (ErrorT e m)) where
+    get = inRan get
+    put = inRan . put
+    
+instance (RMonad m, Error e, MonadReader r (Ran m)) => MonadReader r (Ran (ErrorT e m)) where
+    ask     = inRan ask
+    local f = inRan . local f . outRan
+
+instance (RMonad m, Error e, MonadWriter w (Ran m)) => MonadWriter w (Ran (ErrorT e m)) where
+    tell = inRan . tell
+    listen = inRan . listen . outRan
+    pass = inRan . pass . outRan
+
+instance (RMonad m, Error e, MonadRWS r w s (Ran m)) => MonadRWS r w s (Ran (ErrorT e m))
 
 {-
-data ErrorTH e m o = ErrorTH { getErrorTH :: (e -> G m o) -> H m o }
--- Yoneda (ErrorTH b m)
--- forall o. (a -> G m o) -> (b -> G m o) -> H m o
--- forall o. (a -> G m o) -> H m ((b -> G m o) -> o) ?
-instance (RMonad m, Error b) => RMonad (ErrorT b m) where
-    type G (ErrorT b m) = G m 
-    type H (ErrorT b m) = ErrorTH b m
-
-
-
 -- (a -> r) -> r
 instance RMonad (Cont r) where
     type G (Cont r) = Const r
@@ -485,61 +671,3 @@ instance RMonad m => RMonad (ContT r m) where
     type H (ContT r m) = ConstT r (H m)
 -}
 
-
-
--- Yoneda lemma as a right Kan extension along the identity functor
-instance RanIso (Yoneda f) where
-    type G (Yoneda f) = Identity
-    type H (Yoneda f) = f
-    liftRan (Yoneda f) = Ran (\b -> f (runIdentity . b))
-    lowerRan (Ran f) = Yoneda (\b -> f (Identity . b))
-
-ranYoneda :: Ran (Yoneda f) a -> Yoneda f a
-ranYoneda = lowerRan
-
-yonedaRan :: Yoneda f a -> Ran (Yoneda f) a
-yonedaRan = liftRan
-
-instance Pointed f => Pointed (Ran (Yoneda f)) where
-    point = liftRan . point
-
-instance Applicative f => Applicative (Ran (Yoneda f)) where
-    pure = liftRan . pure
-    m <*> n = liftRan (lowerRan m <*> lowerRan n)
-
-instance Alternative f => Alternative (Ran (Yoneda f)) where
-    empty = liftRan empty
-    m <|> n = liftRan (lowerRan m <|> lowerRan n) 
-
-instance Monad f => Monad (Ran (Yoneda f)) where
-    return = liftRan . return
-    m >>= k = liftRan (lowerRan m >>= lowerRan . k)
-
-instance MonadPlus f => MonadPlus (Ran (Yoneda f)) where
-    mzero = liftRan mzero
-    m `mplus` n = liftRan (lowerRan m `mplus` lowerRan n)
-
-instance MonadReader r f => MonadReader r (Ran (Yoneda f)) where
-    ask = liftRan ask
-    local f = liftRan . local f . lowerRan
-
-instance MonadWriter w f => MonadWriter w (Ran (Yoneda f)) where
-    tell = liftRan . tell
-    listen = liftRan . listen . lowerRan
-    pass = liftRan . pass . lowerRan
-
-instance MonadState s f => MonadState s (Ran (Yoneda f)) where
-    get = liftRan get
-    put = liftRan . put
-
-instance MonadIO f => MonadIO (Ran (Yoneda f)) where
-    liftIO = liftRan . liftIO
-
-instance MonadRWS r w s f => MonadRWS r w s (Ran (Yoneda f))
-
-instance MonadError e f => MonadError e (Ran (Yoneda f)) where
-    throwError = liftRan . throwError
-    Ran f `catchError` h = Ran (\k -> f k `catchError` \e -> getRan (h e) k)
-
-instance MonadFix m => MonadFix (Ran (Yoneda m)) where
-    mfix f = Ran (\k -> liftM (runIdentity . k) $ mfix (\a -> getRan (f a) Identity))
