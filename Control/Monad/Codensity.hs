@@ -69,6 +69,7 @@ instance MonadRWS r w s m => MonadRWS r w s (Codensity m)
 
 instance MonadError e m => MonadError e (Codensity m) where
     throwError = lift . throwError
+    f `catchError` h = lift $ lowerCodensity f `catchError` (lowerCodensity . h)
 --    Codensity f `catchError` h = catchError . run
 
 instance MonadTrans Codensity where

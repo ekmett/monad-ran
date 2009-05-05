@@ -4,7 +4,7 @@
 module Control.Monad.Yoneda
     ( -- * The Yoneda Lemma
       Yoneda(..)
-    , runYoneda
+    , lowerYoneda
     ) where
 
 import Data.Monoid
@@ -50,12 +50,12 @@ instance MonadTrans Yoneda where
 
 instance MonadReader r f => MonadReader r (Yoneda f) where
     ask = lift ask
-    local f = lift . local f . runYoneda 
+    local f = lift . local f . lowerYoneda 
 
 instance MonadWriter w f => MonadWriter w (Yoneda f) where
     tell = lift . tell
-    listen = lift . listen . runYoneda
-    pass = lift . pass . runYoneda
+    listen = lift . listen . lowerYoneda
+    pass = lift . pass . lowerYoneda
 
 instance MonadState s f => MonadState s (Yoneda f) where
     get = lift get
@@ -68,9 +68,11 @@ instance MonadRWS r w s f => MonadRWS r w s (Yoneda f)
 
 instance MonadError e f => MonadError e (Yoneda f) where
     throwError = lift . throwError
+    catchError m h = lift $ lowerYoneda m `catchError` (lowerYoneda . h)
 
-instance MonadFix m => MonadFix (Yoneda m)
+instance MonadFix m => MonadFix (Yoneda m) where
+    mfix f = lift $ mfix (lowerYoneda . f)
     
-runYoneda :: Yoneda f a -> f a 
-runYoneda (Yoneda f) = f id
+lowerYoneda :: Yoneda f a -> f a 
+lowerYoneda (Yoneda f) = f id
 
