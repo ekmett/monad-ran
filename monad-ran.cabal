@@ -15,8 +15,9 @@ description:            Fast implementations of monads and monad transformers us
 library
     ghc-options:        -O2 -fspec-constr -funbox-strict-fields
     build-depends:      
-        base >= 4.0 && < 4.2, 
-        mtl >= 1.1 && < 1.2,
-        ghc-prim >= 0.1 && < 0.2
+        base,
+        transformers,
+        mtl >= 2.3,
+        ghc-prim
     exposed-modules:    
         Control.Monad.Ran
